@@ -21,6 +21,7 @@ GRUB_DIR = $(ISO_DIR)/boot/grub
 # Output files
 KERNEL_BIN = $(BUILD_DIR)/hay_os.bin
 ISO_OUT = $(BUILD_DIR)/hay_os.iso
+HDD_IMG = $(BUILD_DIR)/hdd.img
 
 .PHONY: all run clean FORCE
 
@@ -53,9 +54,15 @@ $(BUILD_DIR)/grub.cfg:
 	@echo 'set default=0' >> $(BUILD_DIR)/grub.cfg
 	@echo '' >> $(BUILD_DIR)/grub.cfg
 	@echo 'menuentry "Hay OS" {' >> $(BUILD_DIR)/grub.cfg
-	@echo '    multiboot /boot/hay_os.bin' >> $(BUILD_DIR)/grub.cfg  
+	@echo '    multiboot /boot/hay_os.bin' >> $(BUILD_DIR)/grub.cfg
 	@echo '    boot' >> $(BUILD_DIR)/grub.cfg
 	@echo '}' >> $(BUILD_DIR)/grub.cfg
+
+# Rule to create the HDD image
+$(HDD_IMG):
+	@echo "Creating HDD image (1mb)..."
+	mkdir -p $(BUILD_DIR)
+	dd if=/dev/zero of=$(HDD_IMG) bs=512 count=2048
 
 # Rule to compile the Rust library
 $(RUST_LIB): FORCE
@@ -65,8 +72,8 @@ $(RUST_LIB): FORCE
 FORCE:
 
 # Rule to run the OS image using QEMU
-run: all
-	$(QEMU) -cdrom $(ISO_OUT)
+run: all $(HDD_IMG)
+	$(QEMU) -cdrom $(ISO_OUT) -drive file=$(HDD_IMG),format=raw,index=0,media=disk
 
 # Rule to clean up all build artifacts
 clean:

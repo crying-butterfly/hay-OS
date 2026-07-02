@@ -1,11 +1,14 @@
-use crate::{print, println};
+use crate::{print, println, vga::clear_screen};
+use crate::setup::{SESSION, SetupState, hash_password, save_user_config};
 use spin::Mutex;
+use alloc::string::String;
+use alloc::format;
 
 const BUFFER_SIZE: usize = 64;
-
 struct Shell {
     buffer: [u8; BUFFER_SIZE],
     cursor: usize,
+    temp_username: String,
 }
 
 impl Shell {
@@ -13,16 +16,18 @@ impl Shell {
         Shell {
             buffer: [0; BUFFER_SIZE],
             cursor: 0,
+            temp_username: String::new(),
         }
     }
 
+    
+
+    
     fn add_char(&mut self, c: char) {
         // enter key executes command
         if c == '\n' {
             println!();
-            self.interpret_command();
-            self.clear_buffer();
-            self.print_prompt();
+            self.handle_enter();
             return;
         }
 
@@ -42,17 +47,74 @@ impl Shell {
             self.buffer[self.cursor] = c as u8;
             self.cursor += 1;
 
-            print!("{}", c);
+            // mask password at setup
+            let current_state = SESSION.lock().state;
+            if current_state == SetupState::SetupPassword {
+                print!("*");
+            } else {
+                print!("{}", c);
+            }
         }
     }
+
+    fn handle_enter(&mut self) {
+        let mut session = SESSION.lock();
+        let input_str = match core::str::from_utf8(&self.buffer[..self.cursor]) {
+            Ok(s) => s.trim(),
+            Err(_) => "",
+        };
+
+        match session.state {
+            SetupState::SetupUsername => {
+                if !input_str.is_empty() {
+                    self.temp_username = format!("{}", input_str);
+                    session.state = SetupState::SetupPassword;
+                }
+            }
+            SetupState::SetupPassword => {
+                if !input_str.is_empty() {
+                    let hash = hash_password(input_str.as_bytes());
+
+                    save_user_config(self.temp_username.as_str(), hash);
+
+                    // refresh global session
+                    session.username = format!("{}", self.temp_username);
+                    session.password_hash = hash;
+                    session.state = SetupState::Complete;
+
+                    clear_screen();
+                    println!("========================================");
+                    println!("            Stiggi Setup Complete");
+                    println!("            Config saved to HDD.");
+                    println!("========================================\n");
+                }
+            }
+            SetupState::Complete => {
+                self.interpret_command();
+            }
+        }
+
+        self.clear_buffer();
+        self.print_prompt_internal(&session.state, &session.username);
+    }
+
 
     fn clear_buffer(&mut self) {
         self.buffer = [0; BUFFER_SIZE];
         self.cursor = 0;
     }
 
-    fn print_prompt(&self) {
-        print!("HayOS> ");
+    fn print_prompt_internal(&self, state: &SetupState, username: &str) {
+        match state {
+            SetupState::SetupUsername => print!("Enter your username: "),
+            SetupState::SetupPassword => print!("Set your root password: "),
+            SetupState::Complete => print!("{}>", username),
+        }
+    }
+
+    pub fn print_prompt(&self) {
+        let session = SESSION.lock();
+        self.print_prompt_internal(&session.state, &session.username);
     }
 
     fn interpret_command(&mut self) {
@@ -89,11 +151,11 @@ impl Shell {
             }
             "neofetch" => {
                 println!("  /\\   /\\   OS: Hay OS early phase");
-                println!(" /  \\_/  \\  Kernel: Alpha0.1.2 '3 Rings of doom'");
-                println!(" |         |  Shell: Hay Shell 0.0.1-Tired Shell");
+                println!(" /  \\_/  \\  Kernel: Alpha0.1.2 'Age of filesystem'");
+                println!(" |         |  Shell: Hay Shell 0.0.1-The Setup");
                 println!(" |   _ _   |  Arch: x86_64");
-                println!(" \\_/   \\_/  Package Manager: Stiggi V0.0");
-                println!("            Build: Ring 3 - Stable");
+                println!(" \\_/   \\_/  Boot Setup: Stiggi V0.1");
+                println!("              Build: File System - Stable");
                 println!();
 }
             "panic" => {
@@ -152,8 +214,15 @@ fn pop_key_buffer() -> Option<char> {
 
 // this function will be an task entry point
 pub fn shell_task_main() -> ! {
-    println!("Welcome To hay os press help for a list of commands");
+    clear_screen();
+    
+    crate::setup::initalize_auth();
+    
+    println!("Weclome to hay os type help for a list of commands");
+
     SHELL.lock().print_prompt();
+
+    
 
     loop {
         // if theres a letter we process It In the Shell 

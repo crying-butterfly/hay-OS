@@ -11,6 +11,8 @@ use core::arch::naked_asm;
 static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
 pub const KEYBOARD_INTERRUPT_INDEX: u8 = 33;
 pub const TIMER_INTERRUPT_INDEX: u8 = crate::pic::PIC_1_OFFSET;
+pub const PRIMARY_ATA_INTERRUPT_INDEX: u8 = crate::pic::PIC_1_OFFSET + 14;
+pub const SECONDARY_ATA_INTERRUPT_INDEX: u8 = crate::pic::PIC_1_OFFSET + 15;
 
 pub fn idt_init() {
     unsafe {
@@ -32,6 +34,8 @@ pub fn idt_init() {
         }
         
         IDT[KEYBOARD_INTERRUPT_INDEX].set_handler_fn(keyboard_interrupt_handler);
+        IDT[PRIMARY_ATA_INTERRUPT_INDEX].set_handler_fn(primary_ata_interrupt_handler);
+        IDT[SECONDARY_ATA_INTERRUPT_INDEX].set_handler_fn(secondary_ata_interrupt_handler);
         IDT.load();
     }
 }
@@ -194,4 +198,16 @@ pub extern "C" fn handle_timer_and_schedule(current_rsp: u64) -> u64 {
 
     // if the scheduler is locked stay in current task (Fallback)
     current_rsp
+}
+
+extern "x86-interrupt" fn primary_ata_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        PICS.lock().notify_end_of_interrupt(PRIMARY_ATA_INTERRUPT_INDEX);
+    }
+}
+
+extern "x86-interrupt" fn secondary_ata_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        PICS.lock().notify_end_of_interrupt(SECONDARY_ATA_INTERRUPT_INDEX);
+    }
 }

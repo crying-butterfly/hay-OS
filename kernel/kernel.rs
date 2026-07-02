@@ -19,6 +19,9 @@ pub mod gdt;
 pub mod task;
 pub mod allocator;
 pub mod memory;
+pub mod fs;
+pub mod ata;
+pub mod setup;
 
 
 #[no_mangle]
