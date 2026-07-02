@@ -1,0 +1,28 @@
+[package]
+name = "hay_os"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "kernel"
+crate-type = ["staticlib"]
+path = "kernel/kernel.rs"
+
+[dependencies]
+x86_64 = "0.15.4"
+spin = "0.12.1"
+pic8259 = "0.11.0"
+pc-keyboard = "0.7.0"
+lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
+linked_list_allocator = "0.10.5"
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
+[[bin]]
+name = "kernel"
+path = "kernel/kernel.rs"
+test = false
+bench = false
