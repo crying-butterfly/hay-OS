@@ -9,12 +9,14 @@ pub enum SetupState {
     SetupUsername,
     SetupPassword,
     Complete,
+    AuthAdmin,
 }
 
 pub struct UserSession {
     pub state: SetupState,
     pub username: String,
     pub password_hash: u64,
+    pub is_admin: bool,
 }
 
 impl UserSession {
@@ -23,6 +25,7 @@ impl UserSession {
             state: SetupState::SetupUsername,
             username: format!(""),
             password_hash: 0,
+            is_admin: false,
         }
     }
     

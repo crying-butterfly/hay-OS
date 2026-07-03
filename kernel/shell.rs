@@ -49,7 +49,7 @@ impl Shell {
 
             // mask password at setup
             let current_state = SESSION.lock().state;
-            if current_state == SetupState::SetupPassword {
+            if current_state == SetupState::SetupPassword || current_state == SetupState::AuthAdmin {
                 print!("*");
             } else {
                 print!("{}", c);
@@ -58,43 +58,66 @@ impl Shell {
     }
 
     fn handle_enter(&mut self) {
-        let mut session = SESSION.lock();
-        let input_str = match core::str::from_utf8(&self.buffer[..self.cursor]) {
-            Ok(s) => s.trim(),
-            Err(_) => "",
+        
+        
+        let (current_state, input_str) = {
+            let session = SESSION.lock();
+            let input = match core::str::from_utf8(&self.buffer[..self.cursor]) {
+                Ok(s) => s.trim(),
+                Err(_) => "",
+            };
+            (session.state, input)
         };
 
-        match session.state {
+        match current_state {
             SetupState::SetupUsername => {
                 if !input_str.is_empty() {
+                    let mut session = SESSION.lock();
                     self.temp_username = format!("{}", input_str);
                     session.state = SetupState::SetupPassword;
                 }
             }
             SetupState::SetupPassword => {
-                if !input_str.is_empty() {
-                    let hash = hash_password(input_str.as_bytes());
+            if !input_str.is_empty() {
+                let hash = hash_password(input_str.as_bytes());
+                save_user_config(self.temp_username.as_str(), hash);
 
-                    save_user_config(self.temp_username.as_str(), hash);
+                let mut session = SESSION.lock();
+                session.username = format!("{}", self.temp_username);
+                session.password_hash = hash;
+                session.state = SetupState::Complete;
 
-                    // refresh global session
-                    session.username = format!("{}", self.temp_username);
-                    session.password_hash = hash;
+                clear_screen();
+                println!("========================================");
+                println!("            Stiggi Setup Complete");
+                println!("            Config saved to HDD.");
+                println!("========================================\n");
+            }
+        }
+
+            SetupState::AuthAdmin => {
+            if !input_str.is_empty() {
+                let input_hash = hash_password(input_str.as_bytes());
+                let mut session = SESSION.lock();
+                if input_hash == session.password_hash {
+                    session.is_admin = true;
                     session.state = SetupState::Complete;
-
-                    clear_screen();
-                    println!("========================================");
-                    println!("            Stiggi Setup Complete");
-                    println!("            Config saved to HDD.");
-                    println!("========================================\n");
+                    println!("\n[SUCCESS] Root privileges granted")
+                } else {
+                    session.state = SetupState::Complete;
+                    println!("\n[FAILED] Incorrect Password");
                 }
             }
+        }
+            
+            
             SetupState::Complete => {
                 self.interpret_command();
             }
         }
-
         self.clear_buffer();
+
+        let session = SESSION.lock();
         self.print_prompt_internal(&session.state, &session.username);
     }
 
@@ -108,6 +131,7 @@ impl Shell {
         match state {
             SetupState::SetupUsername => print!("Enter your username: "),
             SetupState::SetupPassword => print!("Set your root password: "),
+            SetupState::AuthAdmin => print!("Enter root password"),
             SetupState::Complete => print!("{}>", username),
         }
     }
@@ -137,14 +161,45 @@ impl Shell {
         return;
     }
        
+        let mut session = SESSION.lock();
         match command {
             "help" => {
                 println!("Availible Commands:");
-                println!("  help - Show all availible commands");
-                println!("  clear - Clear the screen");
-                println!("  echo - echoes what you said");
-                println!("  panic - Triggers a software crash");
-                println!("  neofetch - Shows you OS data");
+                println!("  help      - Show all availible commands");
+                println!("  clear     - Clear the screen");
+                println!("  echo      - echoes what you said");
+                println!("  panic     - Triggers a software crash");
+                println!("  neofetch  - Shows you OS data");
+                println!("  adm       - Gain root privileges");
+                if session.is_admin {
+                    println!("\nRoot Commands:");
+                    println!("  exit_adm  - Drop root privileges");
+                    println!("  reset     - reset Sector 0 (Deletes User config)");
+                }
+            }
+            "adm" => {
+                if session.is_admin {
+                    println!("you are already root");
+                } else {
+                    session.state = SetupState::AuthAdmin;
+                }
+            }
+            "exit.adm" => {
+                if session.is_admin {
+                    session.is_admin = false;
+                    println!("Dropped Root Privileges");
+                } else {
+                    println!("you are not root");
+                }
+            }
+            "reset" => {
+                if session.is_admin {
+                    let empty_sector = [0u8; 512];
+                    crate::ata::write_sector(0, &empty_sector);
+                    println!("Resettet succesfully Restart to trigger setup again")
+                } else {
+                    println!("You need to have root privileges to do this");
+                }
             }
             "clear" => {
                 crate::vga::clear_screen();
@@ -152,10 +207,10 @@ impl Shell {
             "neofetch" => {
                 println!("  /\\   /\\   OS: Hay OS early phase");
                 println!(" /  \\_/  \\  Kernel: Alpha0.1.2 'Age of filesystem'");
-                println!(" |         |  Shell: Hay Shell 0.0.1-The Setup");
+                println!(" |         |  Shell: Hay Shell 0.0.1-Root of the User");
                 println!(" |   _ _   |  Arch: x86_64");
-                println!(" \\_/   \\_/  Boot Setup: Stiggi V0.1");
-                println!("              Build: File System - Stable");
+                println!(" \\_/   \\_/  Setup: Stiggi V0.1");
+                println!("              Build: Root Commands - Stable");
                 println!();
 }
             "panic" => {
