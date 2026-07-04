@@ -9,6 +9,8 @@ struct Shell {
     buffer: [u8; BUFFER_SIZE],
     cursor: usize,
     temp_username: String,
+    current_folder: Option<String>,
+    awaiting_folder_selection: bool,
 }
 
 impl Shell {
@@ -17,6 +19,8 @@ impl Shell {
             buffer: [0; BUFFER_SIZE],
             cursor: 0,
             temp_username: String::new(),
+            current_folder: None,
+            awaiting_folder_selection: false,
         }
     }
 
@@ -152,6 +156,17 @@ impl Shell {
             return;
         }
 
+        if self.awaiting_folder_selection {
+            if command == "Documents" || command == "Home" {
+                self.current_folder = Some(format!("{}", command));
+                self.awaiting_folder_selection = false;
+                println!("Opened Folder '{}' Succesfully", command);
+            } else {
+                println!("This Folder doesnt only Home and Documents exist")
+            }
+            return;
+        }
+
        // we are poofing if the command starts with echo. we are writing it out of match command so we can use args
        if command.starts_with("echo ") {
         // seperates the string at the first space in "echo" "text"
@@ -160,6 +175,17 @@ impl Shell {
         }
         return;
     }
+
+        if command.starts_with("read ") {
+            if let Some(ref dir) = self.current_folder {
+                if let Some((_, filename)) = command.split_once(' ') {
+                    crate::fs::FILE_SYSTEM.lock().read_file(dir, filename.trim());
+                } else {
+                    println!("Error: use the folder command so you can read files");
+                }
+            }
+            return;
+        }
        
         let mut session = SESSION.lock();
         match command {
@@ -168,13 +194,28 @@ impl Shell {
                 println!("  help      - Show all availible commands");
                 println!("  clear     - Clear the screen");
                 println!("  echo      - echoes what you said");
+                println!("  folders   - opens an folder (Documents/ Home");
+                println!("  ls        - list all files in this Folder");
+                println!("  read      - read a targeted text file");
                 println!("  panic     - Triggers a software crash");
                 println!("  neofetch  - Shows you OS data");
+                println!("  editor    - Open the Hay OS Text Editor");
                 println!("  adm       - Gain root privileges");
                 if session.is_admin {
                     println!("\nRoot Commands:");
                     println!("  exit_adm  - Drop root privileges");
                     println!("  reset     - reset Sector 0 (Deletes User config)");
+                }
+            }
+            "folders" => {
+                println!("Which folder do you want to open Documents or Home");
+                self.awaiting_folder_selection = true;
+            }
+            "ls" => {
+                if let Some(ref dir) = self.current_folder {
+                    crate::fs::FILE_SYSTEM.lock().list_dir(dir);
+                } else {
+                    println!("Error: use the folder command so you can list files");
                 }
             }
             "adm" => {
@@ -201,16 +242,20 @@ impl Shell {
                     println!("You need to have root privileges to do this");
                 }
             }
+            "editor" => {
+                crate::editor::EDITOR.lock().start();
+                return;
+            }
             "clear" => {
                 crate::vga::clear_screen();
             }
             "neofetch" => {
                 println!("  /\\   /\\   OS: Hay OS early phase");
-                println!(" /  \\_/  \\  Kernel: Alpha0.1.2 'Age of filesystem'");
-                println!(" |         |  Shell: Hay Shell 0.0.1-Root of the User");
+                println!(" /  \\_/  \\  Kernel: 'Age of filesystem'");
+                println!(" |         |  Shell: Hay Shell 'Master of Text Editors'");
                 println!(" |   _ _   |  Arch: x86_64");
                 println!(" \\_/   \\_/  Setup: Stiggi V0.1");
-                println!("              Build: Root Commands - Stable");
+                println!("              Build: Alpha V0.1 - Stable");
                 println!();
 }
             "panic" => {
@@ -282,7 +327,13 @@ pub fn shell_task_main() -> ! {
     loop {
         // if theres a letter we process It In the Shell 
         if let Some(c) = pop_key_buffer() {
-            SHELL.lock().add_char(c);
+            let mut editor = crate::editor::EDITOR.lock();
+            if editor.state != crate::editor::EditorState::Inactive {
+                editor.handle_input(c);
+            } else {
+                drop(editor);
+                SHELL.lock().add_char(c);
+            }
         } else {
             // if theres no letter we briefly yield the CPU
             core::hint::spin_loop();

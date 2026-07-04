@@ -22,6 +22,7 @@ pub mod memory;
 pub mod fs;
 pub mod ata;
 pub mod setup;
+pub mod editor;
 
 
 #[no_mangle]
