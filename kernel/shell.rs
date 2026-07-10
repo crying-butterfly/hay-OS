@@ -203,7 +203,7 @@ impl Shell {
                 println!("  adm       - Gain root privileges");
                 if session.is_admin {
                     println!("\nRoot Commands:");
-                    println!("  exit_adm  - Drop root privileges");
+                    println!("  exit.adm  - Drop root privileges");
                     println!("  reset     - reset Sector 0 (Deletes User config)");
                 }
             }
