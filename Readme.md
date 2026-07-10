@@ -1,7 +1,7 @@
 **Look at Projects -> Feature releases for infos on new features**
 
 
-**right now the code is being completelly refactored so there wont be commits because it will be taking longer when its finished commits here and hay os will be continued in active developing here**
+**right now the code is being completelly refactored so there wont be commits because it will be taking longer when its finished commits here and hay os will be continued in active development here**
 
 
 welcome to hay os this project is in active development if you want to compile it on linux you need following packages
